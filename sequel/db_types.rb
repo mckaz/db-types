@@ -1,14 +1,15 @@
-class Sequel::Mysql2::Database
+class SequelDB
   extend RDL::Annotate
 
   type 'self.[]', '(Symbol) -> ``gen_output_type(targs)``', wrap: false
   type '[]', '(Symbol) -> ``gen_output_type(targs)``', wrap: false
   type :transaction, "() { () -> %any } -> self", wrap: false
 
+  
   def self.gen_output_type(targs)
     case targs[0]
     when RDL::Type::SingletonType
-      t = RDL::Globals.db_schema[targs[0].val]
+      t = RDL::Globals.seq_db_schema[targs[0].val]
       raise "no schema for table #{targs[0]}" if t.nil?
       new_t = t.elts.clone
       new_t[:__selected] = RDL::Globals.types[:nil]
@@ -29,6 +30,7 @@ module Sequel
   type 'self.sqlite', '() -> DBVal', wrap: false
   
   type 'self.[]', '(Symbol) -> ``gen_output_type(targs)``', wrap: false
+  type 'self.qualify', '(Symbol, Symbol) -> ``qualify_output_type(targs)``', wrap: false
 
   def self.gen_output_type(targs)
     case targs[0]
@@ -37,6 +39,11 @@ module Sequel
     else
       raise "unexpected type"
     end
+  end
+
+  def self.qualify_output_type(targs)
+    raise "unexpected types" unless targs.all? { |a| a.is_a?(RDL::Type::SingletonType) }
+    RDL::Type::GenericType.new(RDL::Type::NominalType.new(SeqQualIdent), targs[0], targs[1])
   end
 end
 class SeqIdent
@@ -72,7 +79,11 @@ class Table
   type_params [:t], :all? ##figure out something for all
   
   type :join, "(Symbol, %any) -> ``join_ret_type(trec, targs)``", wrap: false ## can we get more specifc than %any for 2nd arg?
-  type :left_outer_join, "(Symbol, %any) -> ``join_ret_type(trec, targs)``", wrap: false ## type is same as inner join even though semantics are different
+  type :join, "(Symbol, %any, %any) -> ``join_ret_type(trec, targs)``", wrap: false ## can we get more specifc than %any for 2nd arg?
+  
+  RDL.rdl_alias :Table, :inner_join, :join
+  RDL.rdl_alias :Table, :left_join, :join
+  RDL.rdl_alias :Table, :left_outer_join, :join
 
   def self.get_schema(hash)
     hash.select { |key, val| ![:__last_joined, :__all_joined, :__selected, :__orm].member?(key) }
@@ -90,6 +101,8 @@ class Table
         all << subt.val
       }
       return all
+    when nil
+      return []
     else
       raise "unexpected type #{t} in __all_joined clause"
     end
@@ -98,7 +111,8 @@ class Table
   def self.join_ret_type(trec, targs)
     raise RDL::Typecheck::StaticTypeError, "Unexpected number of arguments to `join`." unless targs.size == 2
     targ1, targ2 = *targs
-    raise RDL::Typecheck::StaticTypeError, "Unexpected second argument type to `join`." unless targ2.is_a?(RDL::Type::FiniteHashType) && (targ2.elts.size == 1)
+    raise RDL::Typecheck::StaticTypeError, "Unexpected second argument type #{targ2} to `join`." unless targ2.is_a?(RDL::Type::FiniteHashType) #&& (targ2.elts.size == 1)
+    ### TODO: add checking for hashes of size > 1
     arg_join_column = targ2.elts.keys[0] ## column name of arg table which is joined on
     rec_join_column = targ2.elts[arg_join_column] ## column name of receiver table which is joined on
     case trec
@@ -106,7 +120,7 @@ class Table
       raise RDL::Typecheck::StaticTypeError, "unexpceted generic type in call to join" unless trec.base.name == "Table"
       receiver_param = trec.params[0].elts
       receiver_schema = get_schema(receiver_param)
-      join_source_schema = get_schema(RDL::Globals.db_schema[receiver_param[:__last_joined].val].elts)
+      join_source_schema = get_schema(RDL::Globals.seq_db_schema[receiver_param[:__last_joined].val].elts)
       rec_all_joined = get_all_joined(receiver_param[:__all_joined])
 
       case rec_join_column
@@ -123,7 +137,7 @@ class Table
         raise RDL::Typecheck::StaticTypeError, "unexpected generic type #{rec_join_column}" unless rec_join_column.base.name == "SeqQualIdent"
         qual_table, qual_column = rec_join_column.params.map { |t| t.val }
         raise RDL::Typecheck::StaticTypeError, "qualified table #{qual_table} is not joined in receiver table, and so its columns cannot be joined on" unless rec_all_joined.include?(qual_table)
-        qual_table_schema = get_schema(RDL::Globals.db_schema[qual_table].elts)
+        qual_table_schema = get_schema(RDL::Globals.seq_db_schema[qual_table].elts)
         raise RDL::Typecheck::StaticTypeError, "No column #{qual_column} in table #{qual_table}." if qual_table_schema[qual_column].nil?
       else
         raise "Unexpected column #{rec_join_column} to join on"
@@ -132,7 +146,7 @@ class Table
       when RDL::Type::SingletonType
         raise RDL::Typecheck::StaticTypeError, "Expected Symbol for first argument to `join`." unless targ1.val.is_a?(Symbol)
         table_name = targ1.val
-        table_schema = RDL::Globals.db_schema[table_name]
+        table_schema = RDL::Globals.seq_db_schema[table_name]
         raise "No schema found for table #{table_name}." unless table_schema
         arg_schema = get_schema(table_schema.elts)  ## look up table schema for argument
         raise RDL::Typecheck::StaticTypeError, "No column #{arg_join_column} for arg in call to `join`." if arg_schema[arg_join_column].nil?
@@ -170,6 +184,8 @@ class Table
   type :first, "() -> ``first_output(trec)``", wrap: false
   type :first, "(``if targs[0] then where_arg_type(trec, targs) else RDL::Globals.types[:bot] end``) -> ``first_output(trec)``", wrap: false
   type :get, '(``get_input(trec)``) -> ``get_output(trec, targs)``', wrap: false
+  type :order, '(``order_input(trec, targs)``) -> self', wrap: false
+  type Sequel, 'self.desc', '(%any) -> ``targs[0]``', wrap: false ## args will ultimately be checked by `order`
   type :select_map, '(Symbol) -> ``select_map_output(trec, targs, :select_map)``', wrap: false
   type :pluck, '(Symbol) -> ``select_map_output(trec, targs, :select_map)``', wrap: false
   type :any?, "() -> %bool", wrap: false
@@ -183,6 +199,27 @@ class Table
   type :map, "() { (``map_block_input(trec)``) -> x } -> Array<x>", wrap: false
   type :each, "() { (``map_block_input(trec)``) -> x } -> self", wrap: false
   type :import, "(``import_arg_type(trec, targs)``, Array<u>) -> Array<String>", wrap: false
+
+  def self.order_input(trec, targs)
+    case trec
+    when RDL::Type::GenericType
+      sym_keys = get_schema(trec.params[0].elts.keys)
+      all_joined = get_all_joined(trec.params[0].elts[:__all_joined])
+      #RDL::Type::UnionType.new(*sym_keys.map { |k| RDL::Type::SingletonType.new(k) })
+      targs.each { |a|
+        case a
+        when RDL::Type::SingletonType
+          return RDL::Globals.types[:bot] unless sym_keys.include?(a.val)
+        when RDL::Type::GenericType
+          return RDL::Globals.types[:bot] unless a.base.name == "SeqQualIdent"
+          check_qual_column(a, all_joined)
+        end
+      }
+      return RDL::Type::VarargType.new(RDL::Type::UnionType.new(*targs))
+    else
+      raise "unexpected type #{trec}"
+    end
+  end
 
   def self.map_block_input(trec)
     schema = get_schema(trec.params[0].elts)
@@ -234,14 +271,16 @@ class Table
           raise "unexpected arg type #{arg}" unless column.is_a?(Symbol)
           raise "Ambiguous column identifier #{arg}." unless unique_ids?([column], receiver_param[:__all_joined])
           if column.to_s.include?("__")
-            check_qual_column(column, all_joined)
             map_types << check_qual_column(column, all_joined)
           else
             raise "No column #{column} in receiver table." unless receiver_param[column]
             map_types << receiver_param[column]
           end
+        when RDL::Type::GenericType
+          raise "unexpected arg type #{arg}" unless arg.base.name == "SeqQualIdent"
+          map_types << check_qual_column(arg, all_joined)
         else
-          raise 'unexpected arg type #{arg}'
+          raise "unexpected arg type #{arg}"
         end
       }
       if meth == :select
@@ -266,7 +305,7 @@ class Table
     case trec
     when RDL::Type::GenericType
       sym_keys = get_schema(trec.params[0].elts.keys)
-      RDL::Type::UnionType.new(sym_keys.map { |k| RDL::Type::SingletonType.new(k) })
+      RDL::Type::UnionType.new(*sym_keys.map { |k| RDL::Type::SingletonType.new(k) })
     else
       raise 'unexpected type #{trec}'
     end
@@ -374,15 +413,24 @@ class Table
   ## [+ type +] is optional RDL type. If given, we check that it matches the type of the column in the schema.
   ## returns type of given column
   def self.check_qual_column(column_name, all_joined, type=nil)
-    qual_table, qual_column = column_name.to_s.split "__"
-    qual_table = if qual_table.start_with?(":") then qual_table[1..-1].to_sym else qual_table.to_sym end
-    qual_column = qual_column.to_sym
+    if column_name.is_a?(RDL::Type::GenericType)
+      raise "Expected qualified column type." unless column_name.base.name == "SeqQualIdent"      
+      qual_table, qual_column = column_name.params.map { |t| t.val }
+    else
+      ## symbol with name including underscores
+      qual_table, qual_column = column_name.to_s.split "__"
+      qual_table = if qual_table.start_with?(":") then qual_table[1..-1].to_sym else qual_table.to_sym end
+      qual_column = qual_column.to_sym
+    end
     raise RDL::Typecheck::StaticTypeError, "qualified table #{qual_table} is not joined in receiver table, cannot reference its columns" unless all_joined.include?(qual_table)
-    qual_table_schema = get_schema(RDL::Globals.db_schema[qual_table].elts)
+    qual_table_schema = get_schema(RDL::Globals.seq_db_schema[qual_table].elts)
     raise RDL::Typecheck::StaticTypeError, "No column #{qual_column} in table #{qual_table}." if qual_table_schema[qual_column].nil?
     if type
-      type = type.params[0] if type.is_a?(RDL::Type::GenericType) && (type.base == RDL::Globals.types[:array]) ## only happens if meth is where, don't need to check
-      raise RDL::Typecheck::StaticTypeError, "Incompatible column types. Given #{type} but expected #{qual_table_schema[qual_column]} for column #{column_name}." unless RDL::Type::Type.leq(type, qual_table_schema[qual_column])
+      types = (if type.is_a?(RDL::Type::UnionType) then type.types else [type] end)
+      types.each { |t|
+        t = t.params[0] if t.is_a?(RDL::Type::GenericType) && (t.base == RDL::Globals.types[:array]) ## only happens if meth is where, don't need to check
+        raise RDL::Typecheck::StaticTypeError, "Incompatible column types. Given #{t} but expected #{qual_table_schema[qual_column]} for column #{column_name}." unless RDL::Type::Type.leq(t, qual_table_schema[qual_column])
+      }
     end
     return qual_table_schema[qual_column]
   end
@@ -440,7 +488,7 @@ class Table
     count = {}
     ids.each { |id| count[id] = 0 }
     joined.each { |t|
-      schema = RDL::Globals.db_schema[t]
+      schema = RDL::Globals.seq_db_schema[t]
       raise "schema not found" unless schema
       schema = get_schema(schema.elts)
       ids.each { |id|

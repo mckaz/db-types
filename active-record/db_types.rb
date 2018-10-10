@@ -2,6 +2,9 @@ NESTED_JOINS = false
 
 class ActiveRecord::Base
   extend RDL::Annotate
+
+  type Object, :try, "(Symbol) -> Object", wrap: false
+  type Object, :present?, "() -> %bool", wrap: false
   
   type :initialize, '(``DBType.rec_to_schema_type(trec, true)``) -> self', wrap: false
   type 'self.create', '(``DBType.rec_to_schema_type(trec, true)``) -> ``DBType.rec_to_nominal(trec)``', wrap: false
@@ -10,13 +13,38 @@ class ActiveRecord::Base
   type 'self.create', '() -> ``DBType.rec_to_nominal(trec)``', wrap: false
   type 'self.create!', '() -> ``DBType.rec_to_nominal(trec)``', wrap: false
 
+  type :attribute_names, "() -> Array<String>", wrap: false
+  type :to_json, "(?{ only: Array<String> }) -> String", wrap: false
+
   type :update_column, '(``uc_first_arg(trec)``, ``uc_second_arg(trec, targs)``) -> %bool', wrap: false
+
+  type :[], '(Symbol) -> ``access_output(trec, targs)``', wrap: false
+
+  def self.access_output(trec, targs)
+    case trec
+    when RDL::Type::NominalType
+      tname = trec.name.to_sym
+      tschema = RDL::Globals.ar_db_schema[tname].params[0].elts
+      raise "Schema not found." unless tschema
+      case targs[0]
+      when RDL::Type::SingletonType
+        col = targs[0].val
+        ret = tschema[col]
+        ret = RDL::Globals.types[:nil] unless ret
+        return ret
+      else
+        raise "TODO"
+      end
+    else
+      raise 'unexpected type'
+    end
+  end
 
   def self.uc_first_arg(trec)
     case trec
     when RDL::Type::NominalType
       tname = trec.name.to_sym
-      tschema = RDL::Globals.db_schema[tname].params[0].elts
+      tschema = RDL::Globals.ar_db_schema[tname].params[0].elts
       raise "Schema not found." unless tschema
       typs = []
       tschema.each_key { |k|
@@ -33,7 +61,7 @@ class ActiveRecord::Base
     case trec
     when RDL::Type::NominalType
       tname = trec.name.to_sym
-      tschema = RDL::Globals.db_schema[tname].params[0].elts
+      tschema = RDL::Globals.ar_db_schema[tname].params[0].elts
       raise "Schema not found." unless tschema
       raise "Unexpected first arg type." unless targs[0].is_a?(RDL::Type::SingletonType) && targs[0].val.is_a?(Symbol)
       return tschema[targs[0].val]
@@ -42,6 +70,17 @@ class ActiveRecord::Base
     end    
   end
   
+end
+
+module ActiveRecord::AutosaveAssociation
+  extend RDL::Annotate
+  type :reload, "() -> %any", wrap: false
+end
+
+module ActiveRecord::Transactions
+  extend RDL::Annotate
+  type :destroy, '() -> self', wrap: false
+  type :save, '() -> %bool', wrap: false
 end
 
 module ActiveRecord::Suppressor
@@ -113,9 +152,10 @@ module ActiveRecord::Querying
 
   type :joins, '(``DBType.joins_one_input_type(trec, targs)``) -> ``DBType.joins_output(trec, targs)``', wrap: false
   type :joins, '(``DBType.joins_multi_input_type(trec, targs)``, %any, *%any) -> ``DBType.joins_output(trec, targs)``', wrap: false
-  type :group, '(Symbol) -> ``RDL::Type::GenericType.new(RDL::Type::NominalType.new(ActiveRecord_Relation), DBType.rec_to_nominal(trec))``', wrap: false
+  type :group, '(Symbol or String) -> ``RDL::Type::GenericType.new(RDL::Type::NominalType.new(ActiveRecord_Relation), DBType.rec_to_nominal(trec))``', wrap: false
   type :select, '(Symbol or String or Array<String>, *Symbol or String or Array<String>) -> ``RDL::Type::GenericType.new(RDL::Type::NominalType.new(ActiveRecord_Relation), DBType.rec_to_nominal(trec))``', wrap: false
-  type :order, '(String) -> ``RDL::Type::GenericType.new(RDL::Type::NominalType.new(ActiveRecord_Relation), DBType.rec_to_nominal(trec))``', wrap: false
+  type :select, '() { (self) -> %bool } -> ``RDL::Type::GenericType.new(RDL::Type::NominalType.new(ActiveRecord_Relation), DBType.rec_to_nominal(trec))``', wrap: false
+  type :order, '(%any) -> ``RDL::Type::GenericType.new(RDL::Type::NominalType.new(ActiveRecord_Relation), DBType.rec_to_nominal(trec))``', wrap: false
   type :includes, '(``DBType.joins_one_input_type(trec, targs)``) -> ``DBType.joins_output(trec, targs)``', wrap: false
   type :includes, '(``DBType.joins_multi_input_type(trec, targs)``, %any, *%any) -> ``DBType.joins_output(trec, targs)``', wrap: false
   type :limit, '(Integer) -> ``RDL::Type::GenericType.new(RDL::Type::NominalType.new(ActiveRecord_Relation), DBType.rec_to_nominal(trec))``', wrap: false 
@@ -138,9 +178,10 @@ module ActiveRecord::QueryMethods
 
   type :joins, '(``DBType.joins_one_input_type(trec, targs)``) -> ``DBType.joins_output(trec, targs)``', wrap: false
   type :joins, '(``DBType.joins_multi_input_type(trec, targs)``, %any, *%any) -> ``DBType.joins_output(trec, targs)``', wrap: false
-  type :group, '(Symbol) -> ``RDL::Type::GenericType.new(RDL::Type::NominalType.new(ActiveRecord_Relation), trec.params[0])``', wrap: false
-  type :select, '(Symbol or String or Array<String>, *Symbol or String or Array<String>) -> ``RDL::Type::GenericType.new(RDL::Type::NominalType.new(ActiveRecord_Relation), trec.params[0])``', wrap: false
-  type :order, '(String) -> ``RDL::Type::GenericType.new(RDL::Type::NominalType.new(ActiveRecord_Relation), trec.params[0])``', wrap: false
+  type :group, '(Symbol or String) -> ``RDL::Type::GenericType.new(RDL::Type::NominalType.new(ActiveRecord_Relation), trec.params[0])``', wrap: false
+  type :select, '(Symbol or String or Array<String>, *Symbol or String or Array<String>) -> ``RDL::Type::GenericType.new(RDL::TyNpe::NominalType.new(ActiveRecord_Relation), trec.params[0])``', wrap: false
+  type :select, '() { (``trec.params[0]``) -> %bool } -> ``RDL::Type::GenericType.new(RDL::Type::NominalType.new(ActiveRecord_Relation), trec.params[0])``', wrap: false
+  type :order, '(%any) -> ``RDL::Type::GenericType.new(RDL::Type::NominalType.new(ActiveRecord_Relation), trec.params[0])``', wrap: false
   type :includes, '(``DBType.joins_one_input_type(trec, targs)``) -> ``DBType.joins_output(trec, targs)``', wrap: false
   type :includes, '(``DBType.joins_multi_input_type(trec, targs)``, %any, *%any) -> ``DBType.joins_output(trec, targs)``', wrap: false
   type :limit, '(Integer) -> ``trec``', wrap: false
@@ -219,6 +260,12 @@ class ActiveRecord_Relation
   type :destroy_all, '() -> ``DBType.rec_to_array(trec)``', wrap: false
   type :delete_all, '() -> Integer', wrap: false
   type :map, '() { (t) -> u } -> Array<u>'
+  type :all, '() -> self', wrap: false ### kind of a silly method, always just returns self
+  type :collect, "() { (t) -> u } -> Array<u>", wrap: false
+  type :find_each, "() { (t) -> x } -> nil", wrap: false
+  type :to_a, "() -> ``DBType.rec_to_array(trec)``", wrap: false
+  type :[], "(Integer) -> t", wrap: false
+  type :size, "() -> Integer", wrap: false
 end
 
 
@@ -317,7 +364,7 @@ class DBType
   ## [+ check_col +] is a boolean indicating whether or not column types will eventually be checked
   def self.table_name_to_schema_type(tname, check_col, takes_array=false)
     h = {}
-    ttype = RDL::Globals.db_schema[tname]
+    ttype = RDL::Globals.ar_db_schema[tname]
     raise RDL::Typecheck::StaticTypeError, "No table type for #{tname} found." unless ttype      
     tschema = ttype.params[0].elts.except(:__associations)
     tschema.each { |k, v|
@@ -453,7 +500,7 @@ class DBType
   end
 
   def self.associated_with?(rec, sym)
-    tschema = RDL::Globals.db_schema[rec.to_s.to_sym]
+    tschema = RDL::Globals.ar_db_schema[rec.to_s.to_sym]
     raise RDL::Typecheck::StaticTypeError, "No table type for #{rec} found." unless tschema
     schema = tschema.params[0].elts
     assoc = schema[:__associations]
@@ -562,7 +609,7 @@ class DBType
           typs << RDL::Type::SingletonType.new(k)
         end
       }
-      return RDL::Type::UnionType.new(*typs)    
+      return RDL::Type::OptionalType.new(RDL::Type::UnionType.new(*typs))
     end
 
 end
