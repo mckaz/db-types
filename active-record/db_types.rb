@@ -1,3 +1,5 @@
+require_relative 'sql-strings.rb'
+
 NESTED_JOINS = false
 
 class ActiveRecord::Base
@@ -179,7 +181,7 @@ module ActiveRecord::QueryMethods
   type :joins, '(``DBType.joins_one_input_type(trec, targs)``) -> ``DBType.joins_output(trec, targs)``', wrap: false
   type :joins, '(``DBType.joins_multi_input_type(trec, targs)``, %any, *%any) -> ``DBType.joins_output(trec, targs)``', wrap: false
   type :group, '(Symbol or String) -> ``RDL::Type::GenericType.new(RDL::Type::NominalType.new(ActiveRecord_Relation), trec.params[0])``', wrap: false
-  type :select, '(Symbol or String or Array<String>, *Symbol or String or Array<String>) -> ``RDL::Type::GenericType.new(RDL::TyNpe::NominalType.new(ActiveRecord_Relation), trec.params[0])``', wrap: false
+  type :select, '(Symbol or String or Array<String>, *Symbol or String or Array<String>) -> ``RDL::Type::GenericType.new(RDL::Type::NominalType.new(ActiveRecord_Relation), trec.params[0])``', wrap: false
   type :select, '() { (``trec.params[0]``) -> %bool } -> ``RDL::Type::GenericType.new(RDL::Type::NominalType.new(ActiveRecord_Relation), trec.params[0])``', wrap: false
   type :order, '(%any) -> ``RDL::Type::GenericType.new(RDL::Type::NominalType.new(ActiveRecord_Relation), trec.params[0])``', wrap: false
   type :includes, '(``DBType.joins_one_input_type(trec, targs)``) -> ``DBType.joins_output(trec, targs)``', wrap: false
@@ -266,6 +268,7 @@ class ActiveRecord_Relation
   type :to_a, "() -> ``DBType.rec_to_array(trec)``", wrap: false
   type :[], "(Integer) -> t", wrap: false
   type :size, "() -> Integer", wrap: false
+  type :exists?, "() -> %bool", wrap: false
 end
 
 
@@ -379,6 +382,7 @@ class DBType
   end
 
   def self.where_input_type(trec, targs)
+    handle_sql_strings(trec, targs) if targs[0].is_a? RDL::Type::PreciseStringType
     tschema = rec_to_schema_type(trec, true, true)
     return RDL::Type::UnionType.new(tschema, RDL::Globals.types[:string], RDL::Globals.types[:array]) ## no indepth checking for string or array cases
   end
