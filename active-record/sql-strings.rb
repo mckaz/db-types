@@ -99,7 +99,12 @@ def handle_sql_strings(trec, targs)
           # add the joining association column on this
           sql_query = "SELECT * FROM `#{base_klass.name.tableize}` INNER JOIN `#{klass.name.tableize}` ON a.id = b.a_id WHERE #{build_string_from_precise_string(targs)}"
           puts sql_query
-          ast = parser.scan_str(sql_query)
+          begin
+            ast = parser.scan_str(sql_query)
+          rescue Racc::ParseError => e
+            puts "There was a parse error with above query, moving on"
+            return
+          end
           search_cond = ast.query_expression.table_expression.where_clause.search_condition
           visitor = ASTVisitor.new base_klass.name.tableize, targs
           visitor.visit(search_cond)
