@@ -24,6 +24,10 @@ class SequelDB
   end
 end
 
+class Sequel::Mysql2
+  ## hacky way to get the below working
+end
+
 class Sequel::Mysql2::Database
   extend RDL::Annotate
   type 'self.[]', '(Symbol) -> ``gen_output_type(targs)``', wrap: false
