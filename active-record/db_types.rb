@@ -20,7 +20,7 @@ class ActiveRecord::Base
   type :to_json, "(?{ only: Array<String> }) -> String", wrap: false
 
   type :update_column, '(``uc_first_arg(trec)``, ``uc_second_arg(trec, targs)``) -> %bool', wrap: false
-  type :update_attribute, '(Symbol, ``update_attribute_input(trec, targs)``) -> nil', wrap: false
+  type :update_attribute, '(Symbol, ``update_attribute_input(trec, targs)``) -> %bool', wrap: false
 
   type :[], '(Symbol) -> ``access_output(trec, targs)``', wrap: false
 
@@ -279,7 +279,7 @@ class ActiveRecord_Relation
   type :[], "(Integer) -> t", wrap: false
   type :size, "() -> Integer", wrap: false
   type :exists?, "() -> %bool", wrap: false
-  type :update_all, '(``DBType.rec_to_schema_type(trec, true)``) -> nil', wrap: false
+  type :update_all, '(``DBType.rec_to_schema_type(trec, true)``) -> Integer', wrap: false
 end
 
 
