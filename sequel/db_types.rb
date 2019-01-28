@@ -24,6 +24,35 @@ class SequelDB
   end
 end
 
+class Sequel::Mysql2
+  ## hacky way to get the below working
+end
+
+class Sequel::Mysql2::Database
+  extend RDL::Annotate
+  type 'self.[]', '(Symbol) -> ``gen_output_type(targs)``', wrap: false
+  type '[]', '(Symbol) -> ``gen_output_type(targs)``', wrap: false
+  type :transaction, "() { () -> %any } -> self", wrap: false
+
+  def self.gen_output_type(targs)
+    case targs[0]
+    when RDL::Type::SingletonType
+      t = RDL::Globals.seq_db_schema[targs[0].val]
+      raise "no schema for table #{targs[0]}" if t.nil?
+      new_t = t.elts.clone
+      new_t[:__selected] = RDL::Globals.types[:nil]
+      new_t[:__last_joined] = targs[0]
+      new_t[:__all_joined] = targs[0]
+      new_t[:__orm] = RDL::Globals.types[:false] ## orm is either equal to the false type, or the nominal type of the Model class the table represents
+      new_fht = RDL::Type::FiniteHashType.new(new_t, nil)
+      return RDL::Type::GenericType.new(RDL::Type::NominalType.new(Table), new_fht)
+    else
+      raise "unexpected type"
+    end
+  end
+end
+
+
 module Sequel
   extend RDL::Annotate
 
@@ -398,7 +427,7 @@ class Table
         }
         return targs[0]
       else
-        return targs[0] if (meth==:where) && targs[0] == RDL::Globals.types[:string]
+        return targs[0] if (meth==:where) && targs[0] <= RDL::Globals.types[:string]
         raise "TODO WITH #{trec} AND #{targs} AND #{meth}"
       end
     when RDL::Type::NominalType
