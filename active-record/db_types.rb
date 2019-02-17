@@ -1,3 +1,5 @@
+require_relative 'sql-strings.rb'
+
 NESTED_JOINS = false
 
 class ActiveRecord::Base
@@ -12,13 +14,22 @@ class ActiveRecord::Base
   type :initialize, '() -> self', wrap: false
   type 'self.create', '() -> ``DBType.rec_to_nominal(trec)``', wrap: false
   type 'self.create!', '() -> ``DBType.rec_to_nominal(trec)``', wrap: false
+  type 'self.transaction', '() {() -> t } -> t', wrap: false
 
   type :attribute_names, "() -> Array<String>", wrap: false
   type :to_json, "(?{ only: Array<String> }) -> String", wrap: false
 
   type :update_column, '(``uc_first_arg(trec)``, ``uc_second_arg(trec, targs)``) -> %bool', wrap: false
+  type :update_attribute, '(Symbol, ``update_attribute_input(trec, targs)``) -> %bool', wrap: false
 
   type :[], '(Symbol) -> ``access_output(trec, targs)``', wrap: false
+
+  def self.update_attribute_input(trec, targs)
+    col = targs[0].val
+    col_type = targs[1]
+    schema = DBType.rec_to_schema_type(trec, true)
+    schema.elts[col]
+  end
 
   def self.access_output(trec, targs)
     case trec
@@ -86,7 +97,7 @@ end
 module ActiveRecord::Suppressor
   extend RDL::Annotate
 
-  type :save!, '() -> %bool', wrap: false
+  type :save!, '(?{ validate: %bool }) -> %bool', wrap: false
 end
 module ActiveRecord::Core::ClassMethods
   extend RDL::Annotate
@@ -224,6 +235,7 @@ end
 module ActiveRecord::Persistence
   extend RDL::Annotate
   type :update!, '(``DBType.rec_to_schema_type(trec, true)``) -> %bool', wrap: false
+  type :update, '(``DBType.rec_to_schema_type(trec, true)``) -> %bool', wrap: false
 end
 
 module ActiveRecord::Calculations
@@ -266,6 +278,8 @@ class ActiveRecord_Relation
   type :to_a, "() -> ``DBType.rec_to_array(trec)``", wrap: false
   type :[], "(Integer) -> t", wrap: false
   type :size, "() -> Integer", wrap: false
+  type :exists?, "() -> %bool", wrap: false
+  type :update_all, '(``DBType.rec_to_schema_type(trec, true)``) -> Integer', wrap: false
 end
 
 
@@ -379,6 +393,7 @@ class DBType
   end
 
   def self.where_input_type(trec, targs)
+    handle_sql_strings(trec, targs) if targs[0].is_a? RDL::Type::PreciseStringType
     tschema = rec_to_schema_type(trec, true, true)
     return RDL::Type::UnionType.new(tschema, RDL::Globals.types[:string], RDL::Globals.types[:array]) ## no indepth checking for string or array cases
   end
