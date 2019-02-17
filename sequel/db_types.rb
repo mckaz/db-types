@@ -24,9 +24,7 @@ class SequelDB
   end
 end
 
-class Sequel::Mysql2
-  ## hacky way to get the below working
-end
+module Sequel::Mysql2; end
 
 class Sequel::Mysql2::Database
   extend RDL::Annotate
