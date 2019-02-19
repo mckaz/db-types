@@ -128,8 +128,8 @@ module ActiveRecord::FinderMethods
   type :take, '() -> ``DBType.rec_to_nominal(trec)``', wrap: false
   type :take!, '() -> ``DBType.rec_to_nominal(trec)``', wrap: false
   type :take, '(Integer) -> ``DBType.rec_to_array(trec)``', wrap: false
-  type :exists?, '() -> %bool', wrap: false
-  type :exists?, '(Integer or String) -> %bool', wrap: false
+  #type :exists?, '() -> %bool', wrap: false
+  #type :exists?, '(Integer or String) -> %bool', wrap: false
   type :exists?, '(``DBType.exists_input_type(trec, targs)``) -> %bool', wrap: false
 
   
@@ -151,8 +151,8 @@ module ActiveRecord::Querying
   type :take, '() -> ``DBType.rec_to_nominal(trec)``', wrap: false
   type :take!, '() -> ``DBType.rec_to_nominal(trec)``', wrap: false
   type :take, '(Integer) -> ``DBType.rec_to_array(trec)``', wrap: false
-  type :exists?, '() -> %bool', wrap: false
-  type :exists?, '(Integer or String) -> %bool', wrap: false
+  #type :exists?, '() -> %bool', wrap: false
+  #type :exists?, '(Integer or String) -> %bool', wrap: false
   type :exists?, '(``DBType.exists_input_type(trec, targs)``) -> %bool', wrap: false
 
   type :where, '(``DBType.where_input_type(trec, targs)``) -> ``RDL::Type::GenericType.new(RDL::Type::NominalType.new(ActiveRecord_Relation), DBType.rec_to_nominal(trec))``', wrap: false
@@ -278,7 +278,7 @@ class ActiveRecord_Relation
   type :to_a, "() -> ``DBType.rec_to_array(trec)``", wrap: false
   type :[], "(Integer) -> t", wrap: false
   type :size, "() -> Integer", wrap: false
-  type :exists?, "() -> %bool", wrap: false
+  #type :exists?, "() -> %bool", wrap: false
   type :update_all, '(``DBType.rec_to_schema_type(trec, true)``) -> Integer', wrap: false
 end
 
