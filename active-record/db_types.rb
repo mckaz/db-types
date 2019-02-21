@@ -91,7 +91,7 @@ end
 module ActiveRecord::Transactions
   extend RDL::Annotate
   type :destroy, '() -> self', wrap: false
-  type :save, '() -> %bool', wrap: false
+  type :save, '(?{ validate: %bool }) -> %bool', wrap: false
 end
 
 module ActiveRecord::Suppressor
@@ -106,7 +106,7 @@ module ActiveRecord::Core::ClassMethods
   type :find, '(Integer or String) -> ``DBType.find_output_type(trec, targs)``', wrap: false
   type :find, '(Array<Integer>) -> ``DBType.find_output_type(trec, targs)``', wrap: false
   type :find, '(Integer, Integer, *Integer) -> ``DBType.find_output_type(trec, targs)``', wrap: false
-  type :find_by, '(``DBType.rec_to_schema_type(trec, true)``) -> ``DBType.rec_to_nominal(trec)``', wrap: false
+  type :find_by, '(``DBType.find_input_type(trec, targs)``) -> ``DBType.rec_to_nominal(trec)``', wrap: false
   ## TODO: find_by's with conditions given as string
 
 end
@@ -118,7 +118,7 @@ module ActiveRecord::FinderMethods
   type :find, '(Integer or String) -> ``DBType.find_output_type(trec, targs)``', wrap: false
   type :find, '(Array<Integer>) -> ``DBType.find_output_type(trec, targs)``', wrap: false
   type :find, '(Integer, Integer, *Integer) -> ``DBType.find_output_type(trec, targs)``', wrap: false
-  type :find_by, '(``DBType.rec_to_schema_type(trec, true)``) -> ``DBType.rec_to_nominal(trec)``', wrap: false
+  type :find_by, '(``DBType.find_input_type(trec, targs)``) -> ``DBType.rec_to_nominal(trec)``', wrap: false
   type :first, '() -> ``DBType.rec_to_nominal(trec)``', wrap: false
   type :first!, '() -> ``DBType.rec_to_nominal(trec)``', wrap: false
   type :first, '(Integer) -> ``DBType.rec_to_array(trec)``', wrap: false
@@ -163,7 +163,7 @@ module ActiveRecord::Querying
 
   type :joins, '(``DBType.joins_one_input_type(trec, targs)``) -> ``DBType.joins_output(trec, targs)``', wrap: false
   type :joins, '(``DBType.joins_multi_input_type(trec, targs)``, %any, *%any) -> ``DBType.joins_output(trec, targs)``', wrap: false
-  type :group, '(Symbol or String) -> ``RDL::Type::GenericType.new(RDL::Type::NominalType.new(ActiveRecord_Relation), DBType.rec_to_nominal(trec))``', wrap: false
+  type :group, '(*Symbol or String) -> ``RDL::Type::GenericType.new(RDL::Type::NominalType.new(ActiveRecord_Relation), DBType.rec_to_nominal(trec))``', wrap: false
   type :select, '(Symbol or String or Array<String>, *Symbol or String or Array<String>) -> ``RDL::Type::GenericType.new(RDL::Type::NominalType.new(ActiveRecord_Relation), DBType.rec_to_nominal(trec))``', wrap: false
   type :select, '() { (self) -> %bool } -> ``RDL::Type::GenericType.new(RDL::Type::NominalType.new(ActiveRecord_Relation), DBType.rec_to_nominal(trec))``', wrap: false
   type :order, '(%any) -> ``RDL::Type::GenericType.new(RDL::Type::NominalType.new(ActiveRecord_Relation), DBType.rec_to_nominal(trec))``', wrap: false
@@ -189,7 +189,7 @@ module ActiveRecord::QueryMethods
 
   type :joins, '(``DBType.joins_one_input_type(trec, targs)``) -> ``DBType.joins_output(trec, targs)``', wrap: false
   type :joins, '(``DBType.joins_multi_input_type(trec, targs)``, %any, *%any) -> ``DBType.joins_output(trec, targs)``', wrap: false
-  type :group, '(Symbol or String) -> ``RDL::Type::GenericType.new(RDL::Type::NominalType.new(ActiveRecord_Relation), trec.params[0])``', wrap: false
+  type :group, '(*Symbol or String) -> ``RDL::Type::GenericType.new(RDL::Type::NominalType.new(ActiveRecord_Relation), trec.params[0])``', wrap: false
   type :select, '(Symbol or String or Array<String>, *Symbol or String or Array<String>) -> ``RDL::Type::GenericType.new(RDL::Type::NominalType.new(ActiveRecord_Relation), trec.params[0])``', wrap: false
   type :select, '() { (``trec.params[0]``) -> %bool } -> ``RDL::Type::GenericType.new(RDL::Type::NominalType.new(ActiveRecord_Relation), trec.params[0])``', wrap: false
   type :order, '(%any) -> ``RDL::Type::GenericType.new(RDL::Type::NominalType.new(ActiveRecord_Relation), trec.params[0])``', wrap: false
@@ -396,6 +396,11 @@ class DBType
     handle_sql_strings(trec, targs) if targs[0].is_a? RDL::Type::PreciseStringType
     tschema = rec_to_schema_type(trec, true, true)
     return RDL::Type::UnionType.new(tschema, RDL::Globals.types[:string], RDL::Globals.types[:array]) ## no indepth checking for string or array cases
+  end
+
+  def self.find_input_type(trec, targs)
+    handle_sql_strings(trec, targs) if targs[0].is_a? RDL::Type::PreciseStringType
+    rec_to_schema_type(trec, true)
   end
 
   def self.where_noarg_output_type(trec)

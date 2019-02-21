@@ -14,14 +14,22 @@ class ASTVisitor
   def binary_op(o)
     table, column = visit(o.left)
     ident = visit(o.right)
-    query_type = @targs[ident]
+    query_type = @targs[ident] || @targs.last
     schema_type = RDL::Globals.ar_db_schema[table.classify.to_sym].params[0].elts[column.to_sym]
+    query_type = query_type.elts[column.to_sym] if query_type.is_a? RDL::Type::FiniteHashType
+    # puts query_type, schema_type
     raise RDL::Typecheck::StaticTypeError, "type error" unless query_type <= schema_type
   end
 
   alias_method :visit_Greater, :binary_op
   alias_method :visit_Equals, :binary_op
   alias_method :visit_Less, :binary_op
+  alias_method :visit_GreaterOrEquals, :binary_op
+
+  def visit_And(o)
+    visit(o.left)
+    visit(o.right)
+  end
 
   def visit_Subquery(o)
     raise RDL::Typecheck::StaticTypeError, "only works with SELECT queries now" unless o.query_specification.is_a? SQLParser::Statement::Select
