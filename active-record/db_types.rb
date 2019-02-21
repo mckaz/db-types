@@ -18,6 +18,9 @@ class ActiveRecord::Base
   type :to_json, "(?{ only: Array<String> }) -> String", wrap: false
   type :update_column, '(``uc_first_arg(trec)``, ``uc_second_arg(trec, targs)``) -> %bool', wrap: false
   type :[], '(Symbol) -> ``access_output(trec, targs)``', wrap: false
+  type :save!, '(?{ validate: %bool }) -> %bool', wrap: false
+  type 'self.transaction', '() {() -> u} -> u', wrap: false
+
   type RDL::Globals, 'self.ar_db_schema', "() -> Hash<%any, RDL::Type::GenericType>", wrap: false, effect: [:+, :+]
   type String, :singularize, "() -> String", wrap: false, effect: [:+, :+]
   type String, :camelize, "() -> String", wrap: false, effect: [:+, :+]
@@ -219,6 +222,8 @@ end
 module ActiveRecord::Persistence
   extend RDL::Annotate
   type :update!, '(``DBType.rec_to_schema_type(trec, true)``) -> %bool', wrap: false
+  type :update, '(``DBType.rec_to_schema_type(trec, true)``) -> %bool', wrap: false
+  type :update_attribute, '(Symbol, ``DBType.update_attribute_input(trec, targs)``) -> %bool', wrap: false
 end
 
 module ActiveRecord::Calculations
@@ -383,6 +388,13 @@ class DBType
   def self.find_input_type(trec, targs)
     handle_sql_strings(trec, targs) if targs[0].is_a? RDL::Type::PreciseStringType
     rec_to_schema_type(trec, true)
+  end
+
+  def self.update_attribute_input(trec, targs)
+    col = targs[0].val
+    col_type = targs[1]
+    schema = DBType.rec_to_schema_type(trec, true)
+    schema.elts[col]
   end
 
   def self.where_noarg_output_type(trec)
