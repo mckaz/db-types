@@ -55,7 +55,7 @@ class ASTVisitor
     elsif ident.is_a? RDL::Type::GenericType
       query_type = ident
     else
-      puts "(TODO) Unexpected"
+      # puts "(TODO) Unexpected"
     end
 
     schema_type = RDL::Globals.ar_db_schema[table.classify.to_sym].params[0].elts[column.to_sym]
@@ -106,11 +106,11 @@ def handle_sql_strings(trec, targs)
         joined_with.types.each do |klass|
           # add the joining association column on this
           sql_query = "SELECT * FROM `#{base_klass.name.tableize}` INNER JOIN `#{klass.name.tableize}` ON a.id = b.a_id WHERE #{build_string_from_precise_string(targs)}"
-          puts sql_query
+          # puts sql_query
           begin
             ast = parser.scan_str(sql_query)
           rescue Racc::ParseError => e
-            puts "There was a parse error with above query, moving on"
+            # puts "There was a parse error with above query, moving on"
             return
           end
           search_cond = ast.query_expression.table_expression.where_clause.search_condition
@@ -119,15 +119,15 @@ def handle_sql_strings(trec, targs)
         end
       else
         # TODO
-        puts "== TODO =="
+        # puts "== TODO =="
       end
     else
-      puts "UNEXPECTED #{trec}, #{targs}"
+      # puts "UNEXPECTED #{trec}, #{targs}"
     end
   when RDL::Type::NominalType
     base_klass = trec
     sql_query = "SELECT * FROM `#{base_klass.name.tableize}` WHERE #{build_string_from_precise_string(targs)}"
-    puts sql_query
+    # puts sql_query
     ast = parser.scan_str(sql_query)
     search_cond = ast.query_expression.table_expression.where_clause.search_condition
     visitor = ASTVisitor.new base_klass.name.tableize, targs
@@ -135,13 +135,13 @@ def handle_sql_strings(trec, targs)
   when RDL::Type::SingletonType
     base_klass = trec
     sql_query = "SELECT * FROM `#{base_klass.val.to_s.tableize}` WHERE #{build_string_from_precise_string(targs)}"
-    puts sql_query
+    # puts sql_query
     ast = parser.scan_str(sql_query)
     search_cond = ast.query_expression.table_expression.where_clause.search_condition
     visitor = ASTVisitor.new base_klass.val.to_s.tableize, targs
     visitor.visit(search_cond)
   else
-    puts "UNEXPECTED #{trec}, #{targs}"
+    # puts "UNEXPECTED #{trec}, #{targs}"
   end
 end
 
