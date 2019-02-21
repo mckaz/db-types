@@ -389,13 +389,15 @@ class DBType
     handle_sql_strings(trec, targs) if targs[0].is_a? RDL::Type::PreciseStringType
     rec_to_schema_type(trec, true)
   end
+  RDL.type DBType, 'self.find_input_type', "(RDL::Type::Type, Array<RDL::Type::Type>) -> RDL::Type::Type", wrap: false, effect: [:+, :+], typecheck: :type_code
 
   def self.update_attribute_input(trec, targs)
-    col = targs[0].val
+    col = RDL.type_cast(targs[0], "RDL::Type::SingletonType<Symbol>").val
     col_type = targs[1]
     schema = DBType.rec_to_schema_type(trec, true)
     schema.elts[col]
   end
+  RDL.type DBType, 'self.update_attribute_input', "(RDL::Type::Type, Array<RDL::Type::Type>) -> RDL::Type::Type", wrap: false, effect: [:-, :+], typecheck: :type_code
 
   def self.where_noarg_output_type(trec)
     case trec
